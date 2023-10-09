@@ -1,0 +1,9 @@
+`summarise()` has grouped output by 'user_id'. You can override using the `.groups` argument.
+Start sampling
+Warning messages:
+1: Rows containing NAs were excluded from the model. 
+2: In readLines(hpp_path) :
+  incomplete final line found on '/var/folders/hl/dt523djx7_q7xjrthzjpdvc40000gn/T/RtmpT3wREC/model-11ec83b2c81a5.hpp'
+3: In readLines(private$hpp_file_) :
+  incomplete final line found on '/var/folders/hl/dt523djx7_q7xjrthzjpdvc40000gn/T/RtmpT3wREC/model-11ec83b2c81a5.hpp'
+[1] "Save brm object"
