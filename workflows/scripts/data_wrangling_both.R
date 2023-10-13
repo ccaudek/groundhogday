@@ -1,15 +1,17 @@
-# Script name: data_wrangling.R
+# Script name: data_wrangling_both.R
 # Project: groundhog_day
-# Script purpose: data cleaning
+# Script purpose: data cleaning for both the reversal and the no-reversal 
+# sessions
 # @author: Corrado Caudek <corrado.caudek@unifi.it>
 # Date Created: Wed Jun  7 22:20:19 2023
-# Last Modified Date: Wed Jun  7 22:20:19 2023
+# Last Modified Date: Fri Oct 13 10:25:19 2023
 #
 # 👉 
 
 log <- file(snakemake@log[[1]], open="wt")
 sink(log)
 sink(log, type="message")
+
 
 suppressPackageStartupMessages(library("rio"))
 suppressPackageStartupMessages(library("tidyverse"))
@@ -23,10 +25,16 @@ options(max.print = .Machine$integer.max)
 # Read raw data ----------------------------------------------------------------
 
 # d <- readRDS(file = snakemake@input[["rds"]])
-d <- readRDS("data/prep/groundhog_raw.RDS")
+d_rev <- readRDS("data/prep/groundhog_raw.RDS")
+d_rev$is_reversal <- "yes"
+
+d_norev <- readRDS("data/prep/groundhog_norev_raw.RDS")
+d_norev$is_reversal <- "no"
+
+d <- bind_rows(d_rev, d_norev)
 
 length(unique(d$subj_code_1))
-# [1] 305
+# [1] 318
 
 
 # Clean data -------------------------------------------------------------------
@@ -99,10 +107,10 @@ rm(df_ranked)
 # Remove data for which days == NA.
 d <- d[!is.na(d$days), ]
 length(unique(d$user_id))
-# [1] 305
+# [1] 318
 
 nrow(d)
-# [1] 58680
+# [1] 82110
 
 # When there are 60 observations per day, I keep the first 30 ones.
 # From chatGTP: the following code applies a filter to remove the rows where 
@@ -115,7 +123,7 @@ df_selected <- d %>%
   ungroup()
 
 nrow(df_selected)
-# [1] 57510
+# [1] 79650
 
 # Rename dataframe.
 d <- df_selected
@@ -170,7 +178,7 @@ length(bad_ids)
 d <- d[!(d$user_id %in% bad_ids), ]
 rm(df_bysubj_choices, df_bad_ids, bad_ids)
 length(unique(d$user_id))
-# [1] 293
+# [1] 306
 
 # Remove subjects who did not completed the task enough times.
 # From chatGTP: group the data by subj_code_1 using group_by(). Then, apply 
@@ -190,7 +198,7 @@ d <- df
 rm(df)
 
 length(unique(d$user_id))
-# [1] 224
+# [1] 248
 
 # Clean up RTS.
 # RTs for the judgment of the mood in the particular moment ("how do you feed 
@@ -210,10 +218,11 @@ d$mood_pre <- if_else(d$mood_pre == -50 | d$mood_pre == 50, NA, d$mood_pre)
 d$mood_post <- if_else(d$mood_post == -50 | d$mood_post == 50, NA, d$mood_post)
 
 # Replace gain < -20 | gain > 20 with NA.
+hist(d$gain)
 d$gain <- if_else(d$gain < -20 | d$gain > 20, NA, d$gain)
 
 # Replace TIME_total > 15 with NA.
-# d$TIME_total <- ifelse(d$TIME_total > 15, NA, d$TIME_total)
+d$TIME_total <- ifelse(d$TIME_total > 15, NA, d$TIME_total)
 
 # Plot avg choice of "I would repeat the same choice" as a function of trial number.
 out <- d |>
@@ -283,7 +292,7 @@ mood_bad_ids <- mood_dat[names_outliers_MH, ]$user_id |>
 
 df_clean <- dd[!(dd$user_id %in% mood_bad_ids), ]
 length(unique(df_clean$user_id))
-# [1] 208
+# [1] 225
 
 df_clean$mood_change <- df_clean$mood_post - df_clean$mood_pre
 hist(df_clean$mood_change)
@@ -308,6 +317,6 @@ df_clean <- df_clean |>
 
 # saveRDS(df_clean, file = snakemake@output[["clean"]])
 
-saveRDS(df_clean, "data/prep/groundhog_clean.RDS")
+saveRDS(df_clean, "data/prep/groundhog_all_clean.RDS")
 
 # eof ----

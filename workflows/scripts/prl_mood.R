@@ -28,7 +28,10 @@ library("sjmisc")
 
 # IMPORT DATA ------------------------------------------------------------------
 
-d1 <- readRDS("data/prep/groundhog_clean.RDS")
+# Only reversal data
+# d1 <- readRDS("data/prep/groundhog_clean.RDS")
+
+d1 <- readRDS("data/prep/groundhog_all_clean.RDS")
 
 
 # DATA WRANGLING ---------------------------------------------------------------
@@ -36,10 +39,10 @@ d1 <- readRDS("data/prep/groundhog_clean.RDS")
 d1$user_id <- factor(d1$user_id)
 
 d <- d1 |> 
-  dplyr::filter(!is.na(user_id) & ema_number < 11)
+  dplyr::filter(!is.na(user_id) & ema_number < 12)
 
 length(unique(d$user_id))
-# [1] 207
+# [1] 224
 
 
 # The variable ema_number represents the consecutive order of the EMA 
@@ -62,8 +65,9 @@ mean(temp$mx)
 # Does is_target_chosen depend on mood_pre?
 
 tgt_data <- d |> 
-  select(
-    is_target_chosen, feedback,
+  # dplyr::filter(is_reversal == "yes") |> 
+  dplyr::select(
+    is_reversal, is_target_chosen, feedback,
     accuracy, mood_pre, control, trial, ema_number, user_id
   )
 tgt_data$mood_pre_z <- as.vector(scale(tgt_data$mood_pre))
@@ -91,12 +95,12 @@ plot_model(mod_l1, type = "pred", terms = c("mood_pre_z"))
 # brms analysis ----------------------------------------------------------------
 
 mod1 <- brm(
-  is_target_chosen ~ mood_pre_z + control_z + trial_c + ema_number_c + 
-    (mood_pre_z + control_z + trial_c + ema_number_c | user_id),
+  is_target_chosen ~ is_reversal*mood_pre_z + control_z + trial_c + 
+    ema_number_c + 
+    (is_reversal*mood_pre_z + control_z + trial_c + ema_number_c | user_id),
   family = bernoulli(),
   algorithm = "meanfield",
   init = 0.1, 
-  # backend = "cmdstanr",
   data = tgt_data
 )
 
@@ -110,8 +114,9 @@ pp_check(mod1,
 
 conditional_effects(mod1, "trial_c")
 conditional_effects(mod1, "ema_number_c")
-conditional_effects(mod1, "mood_pre_z")
-conditional_effects(mod, "control_z")
+conditional_effects(mod1, "control_z")
+conditional_effects(mod1, "is_reversal")
+conditional_effects(mod1, "mood_pre_z:is_reversal")
 
 bayes_R2(mod1)
 
@@ -166,22 +171,109 @@ plot_model(mod_l2, type = "pred", terms = c("mood_pre_z"))
 
 summary(mod_l2)
 
+norev_df <- tgt_data |> 
+  dplyr::filter(is_reversal == "no")
+
+norev_df <- norev_df %>%
+  group_by(user_id) %>%
+  mutate(days = dense_rank(ema_number))
+
+foo <- norev_df |> 
+  group_by(user_id) |> 
+  summarize(
+    n = n_distinct(days),
+  ) 
+hist(foo$n)
+
+norev_df$days_c <- norev_df$days - 3
+
 mod2 <- brm(
-  feedback ~ mood_pre_z + trial_c + ema_number_c + 
-    (mood_pre_z + trial_c + ema_number_c | user_id),
+  feedback ~ mood_pre_z + control_z + trial_c + days_c + 
+    (mood_pre_z + control_z + trial_c + days_c | user_id),
   family = bernoulli(link = "logit"),
   algorithm = "meanfield",
-  init = 0.1, 
-  data = tgt_data
+  init = 0.01, 
+  data = norev_df
 )
 
 pp_check(mod2)
 summary(mod2)
 
 conditional_effects(mod2, "mood_pre_z")
+conditional_effects(mod2, "control_z")
 conditional_effects(mod2, "trial_c")
-conditional_effects(mod2, "ema_number_c")
+conditional_effects(mod2, "days_c")
 
+rev_df <- tgt_data |> 
+  dplyr::filter(is_reversal == "yes")
+
+rev_df <- rev_df %>%
+  group_by(user_id) %>%
+  mutate(days = dense_rank(ema_number))
+
+foo <- rev_df |> 
+  group_by(user_id) |> 
+  summarize(
+    n = n_distinct(days),
+  ) 
+hist(foo$n)
+
+rev_df <- rev_df |> 
+  dplyr::filter(days < 11)
+
+rev_df$days_c <- rev_df$days - 5
+
+mod3 <- brm(
+  feedback ~ mood_pre_z + control_z + trial_c + days_c + 
+    (mood_pre_z + control_z + trial_c + days_c | user_id),
+  family = bernoulli(link = "logit"),
+  algorithm = "meanfield",
+  init = 0.01, 
+  data = norev_df
+)
+
+pp_check(mod2)
+summary(mod2)
+
+conditional_effects(mod3, "mood_pre_z")
+conditional_effects(mod3, "control_z")
+conditional_effects(mod3, "trial_c")
+conditional_effects(mod3, "days_c")
+
+feedback_df <- bind_rows(rev_df, norev_df)
+
+mod4 <- brm(
+  feedback ~ is_reversal* (mood_pre_z + control_z + trial_c + days_c) + 
+    (is_reversal*(mood_pre_z + control_z + trial_c + days_c) | user_id),
+  family = bernoulli(link = "logit"),
+  algorithm = "meanfield",
+  init = 0.01, 
+  data = feedback_df
+)
+
+conditional_effects(mod4, "mood_pre_z:is_reversal")
+conditional_effects(mod4, "control_z:is_reversal")
+conditional_effects(mod4, "trial_c:is_reversal")
+conditional_effects(mod4, "days_c:is_reversal")
+
+bysubj_feedback_df <- feedback_df |> 
+  group_by(user_id, is_reversal, days) |> 
+  summarize(
+    mood_pre_z = mean(mood_pre_z),
+    pos_feedback = mean(feedback)
+  )
+
+mod5 <- brm(
+  pos_feedback ~ is_reversal * mood_pre_z + days + 
+    (is_reversal * mood_pre_z + days | user_id),
+  family = Beta(),
+  algorithm = "meanfield",
+  init = 0.01, 
+  data = bysubj_feedback_df
+)
+
+conditional_effects(mod5, "mood_pre_z:is_reversal")
+bayes_R2(mod5)
 
 # INTERPRETATION:
 # The results on feedback are similar to those on is_target_chosen.
