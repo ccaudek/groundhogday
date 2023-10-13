@@ -21,6 +21,7 @@ suppressPackageStartupMessages(library("tidyverse"))
 d <- readRDS(file = snakemake@input[["clean"]])
 # d <- readRDS("data/prep/groundhog_clean.RDS")
 
+
 # ---------------------
 # Add required columns for HDDMrl
 # ---------------------
@@ -104,6 +105,8 @@ for_hddm_df <- df_sorted |>
     trial_in_block, trial
   ) |> 
   ungroup()
+
+for_hddm_df <- for_hddm_df[!is.na(for_hddm_df$subj_idx), ]
 
 # ---------------------
 # Save CSV file

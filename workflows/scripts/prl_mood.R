@@ -18,39 +18,36 @@ library("sjPlot")
 library("sjstats")
 library("lme4")
 library("brms")
+library(bayesplot)
 library("effectsize")
 library("scales")
+library("sjPlot")
+library("sjmisc")
 
 
 
-# QUESTION: 
-# Is mood affected by accuracy?
+# IMPORT DATA ------------------------------------------------------------------
 
-d <- readRDS("data/prep/groundhog_clean.RDS")
-
-d$user_id <- factor(d$user_id)
+d1 <- readRDS("data/prep/groundhog_clean.RDS")
 
 
-# # The variable date_num represents the consecutive order of the EMA sessions
-# # for each subject.
-# foo <- d %>%
-#   arrange(user_id, date) %>%
-#   group_by(user_id) %>%
-#   mutate(date_num = match(date, unique(date)))
+# DATA WRANGLING ---------------------------------------------------------------
 
-d <- d |> 
-  dplyr::filter(!is.na(user_id))
+d1$user_id <- factor(d1$user_id)
 
-d <- d |> 
-  dplyr::filter(ema_number < 11)
+d <- d1 |> 
+  dplyr::filter(!is.na(user_id) & ema_number < 11)
 
 length(unique(d$user_id))
 # [1] 207
 
-# df <- d |> 
-#   dplyr::filter(mood_post != 0 & mood_pre != 0)
-# length(unique(df$user_id))
-# 
+
+# The variable ema_number represents the consecutive order of the EMA 
+# sessions for each subject.
+unique_ema_by_user <- lapply(split(d$ema_number, d$user_id), unique)
+unique_ema_by_user
+
+# Compliance
 temp <- d |>
   group_by(user_id) |>
   summarize(
@@ -61,97 +58,263 @@ mean(temp$mx)
 # [1] 7.647343
 
 
-# There is an increase of mood_post as a function of ema_number.
-d |> 
-  group_by(ema_number) %>%
-  summarise(
-    se = sqrt(var(mood_change, na.rm = TRUE) / n()),
-    mood_change = mean(mood_change)
-  ) |> 
-  ggplot(aes(x=ema_number, y=mood_change)) + 
-  geom_line() +
-  geom_point()+
-  geom_errorbar(aes(ymin=mood_change-se, ymax=mood_change+se), width=.2)
+# QUESTION ---------------------------------------------------------------------
+# Does is_target_chosen depend on mood_pre?
 
-d$mood_change |> hist()
+tgt_data <- d |> 
+  select(
+    is_target_chosen, feedback,
+    accuracy, mood_pre, control, trial, ema_number, user_id
+  )
+tgt_data$mood_pre_z <- as.vector(scale(tgt_data$mood_pre))
+tgt_data$control_z <- as.vector(scale(tgt_data$control))
+tgt_data$trial_c <- 
+  as.vector(scale(tgt_data$trial, center = TRUE, scale = FALSE))
+tgt_data$ema_number_c <- 
+  as.vector(scale(tgt_data$ema_number, center = TRUE, scale = FALSE))
 
-sd(d$mood_post)
-# [1] 12.78465
 
-fm <- lmer(
-  mood_post ~ mood_pre * ema_number + (mood_pre * ema_number | user_id), 
-  control = lmerControl(optimizer ='optimx', optCtrl=list(method='nlminb')),
-  data = d
+# glmer analysis ---------------------------------------------------------------
+
+mod_l1 <- glmer(
+  is_target_chosen ~ mood_pre_z + control_z + trial_c + ema_number_c + 
+    (mood_pre_z + control_z + trial_c + ema_number_c | user_id),
+  family = binomial(),
+  data = tgt_data
 )
-summary(fm)
+plot_model(mod_l1, type = "pred", terms = c("trial_c"))
+plot_model(mod_l1, type = "pred", terms = c("ema_number_c"))
+plot_model(mod_l1, type = "pred", terms = c("control_z"))
+plot_model(mod_l1, type = "pred", terms = c("mood_pre_z"))
 
 
-# mood_change = mood_post - mood_pre
-d |> 
+# brms analysis ----------------------------------------------------------------
+
+mod1 <- brm(
+  is_target_chosen ~ mood_pre_z + control_z + trial_c + ema_number_c + 
+    (mood_pre_z + control_z + trial_c + ema_number_c | user_id),
+  family = bernoulli(),
+  algorithm = "meanfield",
+  init = 0.1, 
+  # backend = "cmdstanr",
+  data = tgt_data
+)
+
+pp_check(mod1)
+
+pp_check(mod1,
+         type ="stat",
+         stat = "mean",
+         ndraws = 1000,
+         binwidth = .001)
+
+conditional_effects(mod1, "trial_c")
+conditional_effects(mod1, "ema_number_c")
+conditional_effects(mod1, "mood_pre_z")
+conditional_effects(mod, "control_z")
+
+bayes_R2(mod1)
+
+
+# LOO comparison ---------------------------------------------------------------
+
+md1 <- brm(
+  is_target_chosen ~ mood_pre_z + (mood_pre_z | user_id),
+  family = bernoulli(),
+  algorithm = "meanfield",
+  init = 0.1, 
+  data = tgt_data
+)
+
+md1a <- brm(
+  is_target_chosen ~ 1 + (1 | user_id),
+  family = bernoulli(),
+  algorithm = "meanfield",
+  init = 0.1, 
+  # backend = "cmdstanr",
+  data = tgt_data
+)
+
+loo1 <- add_criterion(md1, "loo")
+loo1a <- add_criterion(md1a, "loo")
+loo_compare(loo1, loo1a)
+#       elpd_diff se_diff
+# loo1      0.0       0.0
+# loo1a -1692.1      58.4
+
+# INTERPRETATION:
+# The choice of the target has the highest probability of reward in 
+# the first 15 trials, but the lowest probability of reward in the last 15 
+# trials. This choice is affected by the present mood at the beginning of the
+# session: target choice increases for more positive mood.
+
+
+# QUESTION ---------------------------------------------------------------------
+# Does feedback depend on mood_pre?
+
+
+mod_l2 <- glmer(
+  feedback ~ mood_pre_z + control_z + trial_c + ema_number_c + 
+    (mood_pre_z + control_z + trial_c + ema_number_c | user_id),
+  family = binomial(link = "logit"),
+  data = tgt_data
+)
+plot_model(mod_l2, type = "pred", terms = c("trial_c"))
+plot_model(mod_l2, type = "pred", terms = c("ema_number_c"))
+plot_model(mod_l2, type = "pred", terms = c("control_z"))
+plot_model(mod_l2, type = "pred", terms = c("mood_pre_z"))
+
+summary(mod_l2)
+
+mod2 <- brm(
+  feedback ~ mood_pre_z + trial_c + ema_number_c + 
+    (mood_pre_z + trial_c + ema_number_c | user_id),
+  family = bernoulli(link = "logit"),
+  algorithm = "meanfield",
+  init = 0.1, 
+  data = tgt_data
+)
+
+pp_check(mod2)
+summary(mod2)
+
+conditional_effects(mod2, "mood_pre_z")
+conditional_effects(mod2, "trial_c")
+conditional_effects(mod2, "ema_number_c")
+
+
+# INTERPRETATION:
+# The results on feedback are similar to those on is_target_chosen.
+
+
+# QUESTION ---------------------------------------------------------------------
+# Does mood change (post - pre) depend on ema_number?
+
+mood_df <- d |> 
+  # dplyr::filter(mood_post != 0 & mood_pre != 0) |> 
   group_by(user_id, ema_number) |> 
   summarize(
-    mood_change = mean(mood_change, na.rm = TRUE)
+    mood_change = mean(mood_change, na.rm = TRUE),
+    mood_post = mean(mood_post, na.rm = TRUE),
+    mood_pre = mean(mood_pre, na.rm = TRUE),
+    control = mean(control, na.rm = TRUE),
+    gain = mean(gain, na.rm = TRUE)
   ) |> 
+  ungroup()
+
+# mood_change = mood_post - mood_pre
+mood_df |> 
   group_by(ema_number) |> 
   summarize(
-    mc = mean(mood_change, na.rm = TRUE),
-    stderr = sqrt(var(mood_change, na.rm = TRUE) / n()),
-    n = n()
-  )
+    mood_change = mean(mood_change, na.rm = TRUE)
+  ) 
+
+mood_df$mood_ch_z <- as.vector(scale(mood_df$mood_change)) 
+mood_df$mood_pre_z <- as.vector(scale(mood_df$mood_pre)) 
+mood_df$mood_post_z <- as.vector(scale(mood_df$mood_post)) 
+mood_df$control_z <- as.vector(scale(mood_df$control)) 
+mood_df$ema_number_z <- as.vector(scale(mood_df$ema_number)) 
+mood_df$gain_z <- as.vector(scale(mood_df$gain)) 
 
 
-d$mood_ch <- scale(d$mood_change) |> as.numeric()
-
-mydat <- d |> 
-  dplyr::select(mood_post, mood_pre, ema_number, user_id)
-
-m1 <- brm(
-  mood_post ~ mood_pre + ema_number + (ema_number | user_id),
-  family = student(),
-  algorithm = "meanfield",
-  data = d
+mod_l3 <- lmer(
+  mood_ch_z ~ gain_z + ema_number_z + mood_pre_z + control_z +
+    (ema_number_z + mood_pre_z + control_z | user_id),
+  data = mood_df
 )
-pp_check(m1) + xlim(-3, 3)
-conditional_effects(m1, "ema_number")
+summary(mod_l3)
 
-hist(d$mood_post)
 
-m2 <- brm(
-  mood_change ~ ema_number + (ema_number | user_id),
-  family = student(),
+mod3 <- brm(
+  mood_ch_z ~ gain_z + ema_number_z + mood_pre_z + 
+    (gain_z + ema_number_z + mood_pre_z | user_id),
+  family = asym_laplace(),
   algorithm = "meanfield",
-  data = d
+  data = mood_df
 )
-pp_check(m2) + xlim(-3, 3)
-conditional_effects(m2, "ema_number")
-(loo2 <- loo(m2)) 
 
-m3 <- brm(
-  mood_change ~ ema_number * gain + (ema_number * gain | user_id),
-  family = student(),
-  algorithm = "meanfield",
-  data = d
+# simulations vs. obs: Overall
+pp_check(mod3,
+         type ="dens_overlay",
+         ndraws = 100)
+
+pp_check(mod3,
+         type ="stat",
+         stat = "mean",
+         ndraws = 1000,
+         binwidth = .001)
+
+
+pp_check(mod3,
+         type ="stat",
+         stat = "sd",
+         ndraws = 500,
+         binwidth = .001)
+
+
+pp_check(mod3,
+         type ="stat_2d")
+
+
+pp_check(mod3,
+         type ="scatter_avg")
+
+
+
+# MODEL EVAL: LOO --------------------------------------------------------
+
+# loo & pareto K
+model_loo <- loo(mod3, save_psis = TRUE, cores = 4)
+plot(model_loo, diagnostic = "k")
+plot(model_loo, diagnostic = "n_eff")
+
+# loo pit
+w <- weights(model_loo$psis_object)
+ppc_loo_pit_overlay(y = mood_df$mood_ch_z, 
+                    yrep = posterior_predict(mod3), 
+                    lw = w)
+ppc_loo_pit_qq(y = mood_df$mood_ch_z, 
+               yrep = posterior_predict(mod3), 
+               lw = w)
+
+# MODEL EVAL: COND. EFF. -------------------------------------------------------
+
+plot(
+  conditional_effects(
+    mod3, 
+    "gain_z",
+    re_formula = NA,
+    method = "fitted",
+    spaghetti = TRUE,
+    ndraws = 200
+  ),
+  points = FALSE
 )
-pp_check(m3) + xlim(-3, 3)
-conditional_effects(m3, "ema_number")
-(loo3 <- loo(m3)) 
 
-
-
-temp <- d |> 
-  dplyr::filter(mood_post != 0)
-
-hist(temp$mood_post)
-
-m2 <- brm(
-  mood_post ~ mood_pre * date_num + (mood_pre * date_num | user_id),
-  family = student(),
-  algorithm = "meanfield",
-  data = d
+plot(
+  conditional_effects(
+    mod3, 
+    "ema_number_z",
+    re_formula = NA,
+    method = "fitted",
+    spaghetti = TRUE,
+    ndraws = 200
+  ),
+  points = FALSE
 )
-pp_check(m2) + xlim(-2, 2)
-conditional_effects(m2, "date_num:mood_pre")
 
+
+plot(
+  conditional_effects(
+    mod3, 
+    "mood_pre_z",
+    re_formula = NA,
+    method = "fitted",
+    spaghetti = TRUE,
+    ndraws = 200
+  ),
+  points = FALSE
+)
 
 
 

@@ -19,19 +19,17 @@ suppressPackageStartupMessages(library("recipes"))
 
 options(max.print = .Machine$integer.max)
 
-# ---------------------
-# Read RDS file with all raw data
-# ---------------------
+
+# Read raw data ----------------------------------------------------------------
 
 # d <- readRDS(file = snakemake@input[["rds"]])
 d <- readRDS("data/prep/groundhog_raw.RDS")
 
-# length(unique(d$subj_code_1))
+length(unique(d$subj_code_1))
 # [1] 305
 
-# ---------------------
-# Clean data
-# ---------------------
+
+# Clean data -------------------------------------------------------------------
 
 # Remove variable always equal to 1.
 d$has_answered <- NULL
@@ -100,8 +98,9 @@ rm(df_ranked)
 
 # Remove data for which days == NA.
 d <- d[!is.na(d$days), ]
-# length(unique(d$user_id))
+length(unique(d$user_id))
 # [1] 305
+
 nrow(d)
 # [1] 58680
 
@@ -127,13 +126,13 @@ rm(df_selected)
 d$gain <- d$final_score - d$mood_pre
 hist(d$gain)
 
-# # There are some outliers
-# d$gain <- ifelse(
-#   d$gain < -30, -30, ifelse(
-#     d$gain > 30, 30, d$gain
-#   )
-# )
-# hist(d$gain)
+# There are some outliers
+d$gain <- ifelse(
+  d$gain < -30, -30, ifelse(
+    d$gain > 30, 30, d$gain
+  )
+)
+hist(d$gain)
 
 # Compute accuracy defined as choosing the more rewarding stimulus from 
 # the first and the second epoch (Geana et al., 2021).
@@ -151,15 +150,6 @@ foo <- d |>
   )
 hist(foo$acc)
 
-# Plot avg choice of "I would repeat the same choice" as a function of trial number.
-# out <- df_ranked |>
-#     group_by(trial) |>
-#     summarize(
-#         y1 = mean(is_target_chosen, na.rm = TRUE)
-#     )
-# 
-# plot(out$trial, out$y1, type = "l")
-
 # Find subjects who have always select only the option "I would repeat the same
 # action as I did", or only selected the opposite option.
 # Remove participants who have always chosen only one response option.
@@ -175,10 +165,11 @@ df_bad_ids <-
       df_bysubj_choices$avg_trg_chosen == 0, ]
 
 bad_ids <- unique(df_bad_ids$user_id)
+length(bad_ids)
 
 d <- d[!(d$user_id %in% bad_ids), ]
 rm(df_bysubj_choices, df_bad_ids, bad_ids)
-# length(unique(d$user_id))
+length(unique(d$user_id))
 # [1] 293
 
 # Remove subjects who did not completed the task enough times.
@@ -198,21 +189,21 @@ df <- d %>%
 d <- df
 rm(df)
 
-# length(unique(d$user_id))
+length(unique(d$user_id))
 # [1] 224
 
 # Clean up RTS.
 # RTs for the judgment of the mood in the particular moment ("how do you feed 
 # in this moment?")
 d$rt_inst <- d$rt / 1000
-d$rt_inst <- if_else(d$rt_inst > 10 | d$rt_inst < 0.25, NA, d$rt_inst)
-# hist(d$rt_inst)
+d$rt_inst <- if_else(d$rt_inst > 6 | d$rt_inst < 0.25, NA, d$rt_inst)
+hist(d$rt_inst)
 
 # RTs for the PRL task.
 d$rt <- d$rt_choice / 1000
-d$rt <- if_else(d$rt > 10 | d$rt < 0.25, NA, d$rt)
+d$rt <- if_else(d$rt > 6 | d$rt < 0.25, NA, d$rt)
 d$rt_choice <- NULL
-# hist(d$rt)
+hist(d$rt)
 
 # Replace mood_pre == 50 | mood_post == 50 with NA.
 d$mood_pre <- if_else(d$mood_pre == -50 | d$mood_pre == 50, NA, d$mood_pre)
@@ -223,6 +214,15 @@ d$gain <- if_else(d$gain < -20 | d$gain > 20, NA, d$gain)
 
 # Replace TIME_total > 15 with NA.
 # d$TIME_total <- ifelse(d$TIME_total > 15, NA, d$TIME_total)
+
+# Plot avg choice of "I would repeat the same choice" as a function of trial number.
+out <- d |>
+  group_by(trial) |>
+  summarize(
+    y1 = mean(is_target_chosen, na.rm = TRUE)
+  )
+
+plot(out$trial, out$y1, type = "l")
 
 # Remove useless columns.
 df_clean <- d |>
@@ -239,7 +239,8 @@ if (0) {
 }
 
 
-# Impute data
+# Impute data ------------------------------------------------------------------
+
 # Deterministic regression imputation 
 # >>> If Snakemake produces an ERROR, change this <<<
 set.seed(12345)
@@ -254,9 +255,8 @@ imp <- mice(df_clean, meth=meth, post=post, m = 1, print=FALSE)
 # Access the completed imputed data
 dd <- complete(imp)
 
-# ---------------------
-# Remove outliers
-# ---------------------
+
+# Remove outliers --------------------------------------------------------------
 
 # Outlier detection with Mahalanobis distance on the following 
 # columns: mood_pre, mood_post, instant_mood, sd(instant_mood).
@@ -282,7 +282,7 @@ mood_bad_ids <- mood_dat[names_outliers_MH, ]$user_id |>
   as.numeric()
 
 df_clean <- dd[!(dd$user_id %in% mood_bad_ids), ]
-# length(unique(df_clean$user_id))
+length(unique(df_clean$user_id))
 # [1] 208
 
 df_clean$mood_change <- df_clean$mood_post - df_clean$mood_pre
@@ -304,9 +304,7 @@ df_clean <- df_clean |>
   )
 
 
-# ---------------------
-# Store for later use
-# ---------------------
+# Store for later use ----------------------------------------------------------
 
 # saveRDS(df_clean, file = snakemake@output[["clean"]])
 
