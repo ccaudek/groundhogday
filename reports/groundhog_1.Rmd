@@ -1,0 +1,133 @@
+---
+title             : "The title"
+shorttitle        : "Title"
+
+author: 
+  - name          : "First Author"
+    affiliation   : "1"
+    corresponding : yes    # Define only one corresponding author
+    address       : "Postal address"
+    email         : "my@email.com"
+    role: # Contributorship roles (e.g., CRediT, https://credit.niso.org/)
+      - "Conceptualization"
+      - "Writing - Original Draft Preparation"
+      - "Writing - Review & Editing"
+  - name          : "Ernst-August Doelle"
+    affiliation   : "1,2"
+    role:
+      - "Writing - Review & Editing"
+      - "Supervision"
+
+affiliation:
+  - id            : "1"
+    institution   : "Wilhelm-Wundt-University"
+  - id            : "2"
+    institution   : "Konstanz Business School"
+
+authornote: |
+  Add complete departmental affiliations for each author here. Each new line herein must be indented, like this line.
+
+  Enter author note here.
+
+abstract: |
+  One or two sentences providing a **basic introduction** to the field,  comprehensible to a scientist in any discipline.
+  Two to three sentences of **more detailed background**, comprehensible  to scientists in related disciplines.
+  One sentence clearly stating the **general problem** being addressed by  this particular study.
+  One sentence summarizing the main result (with the words "**here we show**" or their equivalent).
+  Two or three sentences explaining what the **main result** reveals in direct comparison to what was thought to be the case previously, or how the  main result adds to previous knowledge.
+  One or two sentences to put the results into a more **general context**.
+  Two or three sentences to provide a **broader perspective**, readily comprehensible to a scientist in any discipline.
+  
+  <!-- https://tinyurl.com/ybremelq -->
+  
+keywords          : "keywords"
+wordcount         : "X"
+
+bibliography      : "r-references.bib"
+
+floatsintext      : no
+linenumbers       : yes
+draft             : no
+mask              : no
+
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+
+classoption       : "man"
+output            : papaja::apa6_pdf
+---
+
+```{r setup, include = FALSE}
+library("papaja")
+r_refs("r-references.bib")
+```
+
+```{r analysis-preferences}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
+Here, our goal was to quantify the relationship between mood and adaptive behaviour in two common reinforcement learning tasks: one in which reward probabilities do not change (stable) and one in which reward probabilities periodically change (volatile). We addressed the following questions: (1) Is mood affected by the groundhog learning experience? (2) Do mood dynamics adjust to environmental volatility? 
+<!-- (3) Are mood dynamics affected by depression in the context of learning? -->
+
+
+# Methods
+We report how we determined our sample size, all data exclusions (if any), all manipulations, and all measures in the study. <!-- 21-word solution (Simmons, Nelson & Simonsohn, 2012; retrieved from http://ssrn.com/abstract=2160588) -->
+
+# A computational model of momentary subjective well-being
+
+Modeling instantaneous well-being in a probabilistic reversal learning task requires capturing how recent choices, outcomes, and changes in contingencies affect a participant's mood. Similarly to @rutledge2014computational, we employed a linear approach where the impact of past events decays exponentially:
+
+$$
+\text{Happiness}_t = w_0 + w_1 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot O_j + w_2 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot R_j + w_3 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot S_j + w_4 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot \Delta P_j,
+$$
+
+where $t$ is the trial number, $w_0$ is a constant term, $w_1, w_2, w_3,$ and $w_4$ are weights capturing the influence of different event types, $\gamma$ is a forgetting factor $(0 \leq \gamma \leq 1)$ making events in more recent trials more influential than those in earlier trials, $O_j$ is the outcome (+1 or -1) on trial $j$, $R_j$ is a binary variable indicating a reversal on trial $j$ (1 if there was a reversal, 0 otherwise), $S_j$ is the chosen stimulus on trial $j$ (coded as 1 for stimulus A and -1 for stimulus B), $\Delta P_j$ is the change in probability associated with the chosen stimulus on trial $j$ (e.g., from 0.8 to 0.2 or from 0.2 to 0.8).
+
+The parameters' estimation was carried out by defining a function to compute the predicted happiness based on the model, a function to compute the negative log-likelihood, and then using an optimization function to find the maximum likelihood estimates of the parameters $w_0, w_1, w_2, w_3,$ and $w_4$, and $\gamma$.
+
+## Participants
+
+## Material
+
+## Procedure
+
+## Data analysis
+We used `r cite_r("r-references.bib")` for all our analyses.
+
+
+# Results
+
+**Compute the bayesian probability for each statement!**
+
+1. **Mood Generally Improves**: The positive intercept suggests that mood generally improves after the task.
+   
+2. **Reversal Worsens Mood**: A reversal in the task tends to worsen the mood.
+
+3. **Modulation by z-variables**: Some z-variables like `z1` seem to buffer against the negative effect of a reversal, while others like `zg` seem to exacerbate it.
+
+4. **Control Doesn't Matter Much**: Perceived control doesn't seem to significantly affect mood change.
+
+5. **Regression to Mean**: There is a strong regression to the mean in mood changes.
+
+6. **Individual Differences**: There are significant individual differences both between users and between sessions for the same user.
+
+Given your interest in whether mood improves after the task and how this is influenced by other variables, it appears that mood generally improves but this can be modulated by factors like reversals in the task and certain individual parameters (`z1`, `zg`).
+
+# Discussion
+
+
+\newpage
+
+# References
+
+::: {#refs custom-style="Bibliography"}
+:::
+
+\newpage
+
+# Supplementary Materials
+
+

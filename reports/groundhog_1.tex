@@ -1,0 +1,336 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+  man]{apa6}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+% Make \paragraph and \subparagraph free-standing
+\ifx\paragraph\undefined\else
+  \let\oldparagraph\paragraph
+  \renewcommand{\paragraph}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+  \let\oldsubparagraph\subparagraph
+  \renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{3em}
+\newlength{\cslentryspacingunit} % times entry-spacing
+\setlength{\cslentryspacingunit}{\parskip}
+\newenvironment{CSLReferences}[2] % #1 hanging-ident, #2 entry spacing
+ {% don't indent paragraphs
+  \setlength{\parindent}{0pt}
+  % turn on hanging indent if param 1 is 1
+  \ifodd #1
+  \let\oldpar\par
+  \def\par{\hangindent=\cslhangindent\oldpar}
+  \fi
+  % set entry spacing
+  \setlength{\parskip}{#2\cslentryspacingunit}
+ }%
+ {}
+\usepackage{calc}
+\newcommand{\CSLBlock}[1]{#1\hfill\break}
+\newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{#1}}
+\newcommand{\CSLRightInline}[1]{\parbox[t]{\linewidth - \csllabelwidth}{#1}\break}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+\ifLuaTeX
+\usepackage[bidi=basic]{babel}
+\else
+\usepackage[bidi=default]{babel}
+\fi
+\babelprovide[main,import]{english}
+% get rid of language-specific shorthands (see #6817):
+\let\LanguageShortHands\languageshorthands
+\def\languageshorthands#1{}
+% Manuscript styling
+\usepackage{upgreek}
+\captionsetup{font=singlespacing,justification=justified}
+
+% Table formatting
+\usepackage{longtable}
+\usepackage{lscape}
+% \usepackage[counterclockwise]{rotating}   % Landscape page setup for large tables
+\usepackage{multirow}		% Table styling
+\usepackage{tabularx}		% Control Column width
+\usepackage[flushleft]{threeparttable}	% Allows for three part tables with a specified notes section
+\usepackage{threeparttablex}            % Lets threeparttable work with longtable
+
+% Create new environments so endfloat can handle them
+% \newenvironment{ltable}
+%   {\begin{landscape}\centering\begin{threeparttable}}
+%   {\end{threeparttable}\end{landscape}}
+\newenvironment{lltable}{\begin{landscape}\centering\begin{ThreePartTable}}{\end{ThreePartTable}\end{landscape}}
+
+% Enables adjusting longtable caption width to table width
+% Solution found at http://golatex.de/longtable-mit-caption-so-breit-wie-die-tabelle-t15767.html
+\makeatletter
+\newcommand\LastLTentrywidth{1em}
+\newlength\longtablewidth
+\setlength{\longtablewidth}{1in}
+\newcommand{\getlongtablewidth}{\begingroup \ifcsname LT@\roman{LT@tables}\endcsname \global\longtablewidth=0pt \renewcommand{\LT@entry}[2]{\global\advance\longtablewidth by ##2\relax\gdef\LastLTentrywidth{##2}}\@nameuse{LT@\roman{LT@tables}} \fi \endgroup}
+
+% \setlength{\parindent}{0.5in}
+% \setlength{\parskip}{0pt plus 0pt minus 0pt}
+
+% Overwrite redefinition of paragraph and subparagraph by the default LaTeX template
+% See https://github.com/crsh/papaja/issues/292
+\makeatletter
+\renewcommand{\paragraph}{\@startsection{paragraph}{4}{\parindent}%
+  {0\baselineskip \@plus 0.2ex \@minus 0.2ex}%
+  {-1em}%
+  {\normalfont\normalsize\bfseries\itshape\typesectitle}}
+
+\renewcommand{\subparagraph}[1]{\@startsection{subparagraph}{5}{1em}%
+  {0\baselineskip \@plus 0.2ex \@minus 0.2ex}%
+  {-\z@\relax}%
+  {\normalfont\normalsize\itshape\hspace{\parindent}{#1}\textit{\addperi}}{\relax}}
+\makeatother
+
+\makeatletter
+\usepackage{etoolbox}
+\patchcmd{\maketitle}
+  {\section{\normalfont\normalsize\abstractname}}
+  {\section*{\normalfont\normalsize\abstractname}}
+  {}{\typeout{Failed to patch abstract.}}
+\patchcmd{\maketitle}
+  {\section{\protect\normalfont{\@title}}}
+  {\section*{\protect\normalfont{\@title}}}
+  {}{\typeout{Failed to patch title.}}
+\makeatother
+
+\usepackage{xpatch}
+\makeatletter
+\xapptocmd\appendix
+  {\xapptocmd\section
+    {\addcontentsline{toc}{section}{\appendixname\ifoneappendix\else~\theappendix\fi\\: #1}}
+    {}{\InnerPatchFailed}%
+  }
+{}{\PatchFailed}
+\keywords{keywords\newline\indent Word count: X}
+\DeclareDelayedFloatFlavor{ThreePartTable}{table}
+\DeclareDelayedFloatFlavor{lltable}{table}
+\DeclareDelayedFloatFlavor*{longtable}{table}
+\makeatletter
+\renewcommand{\efloat@iwrite}[1]{\immediate\expandafter\protected@write\csname efloat@post#1\endcsname{}}
+\makeatother
+\usepackage{lineno}
+
+\linenumbers
+\usepackage{csquotes}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={The title},
+  pdfauthor={First Author1 \& Ernst-August Doelle1,2},
+  pdflang={en-EN},
+  pdfkeywords={keywords},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{The title}
+\author{First Author\textsuperscript{1} \& Ernst-August Doelle\textsuperscript{1,2}}
+\date{}
+
+
+\shorttitle{Title}
+
+\authornote{
+
+Add complete departmental affiliations for each author here. Each new line herein must be indented, like this line.
+
+Enter author note here.
+
+The authors made the following contributions. First Author: Conceptualization, Writing - Original Draft Preparation, Writing - Review \& Editing; Ernst-August Doelle: Writing - Review \& Editing, Supervision.
+
+Correspondence concerning this article should be addressed to First Author, Postal address. E-mail: \href{mailto:my@email.com}{\nolinkurl{my@email.com}}
+
+}
+
+\affiliation{\vspace{0.5cm}\textsuperscript{1} Wilhelm-Wundt-University\\\textsuperscript{2} Konstanz Business School}
+
+\abstract{%
+One or two sentences providing a \textbf{basic introduction} to the field, comprehensible to a scientist in any discipline.
+Two to three sentences of \textbf{more detailed background}, comprehensible to scientists in related disciplines.
+One sentence clearly stating the \textbf{general problem} being addressed by this particular study.
+One sentence summarizing the main result (with the words ``\textbf{here we show}'' or their equivalent).
+Two or three sentences explaining what the \textbf{main result} reveals in direct comparison to what was thought to be the case previously, or how the main result adds to previous knowledge.
+One or two sentences to put the results into a more \textbf{general context}.
+Two or three sentences to provide a \textbf{broader perspective}, readily comprehensible to a scientist in any discipline.
+}
+
+
+
+\begin{document}
+\maketitle
+
+Here, our goal was to quantify the relationship between mood and adaptive behaviour in two common reinforcement learning tasks: one in which reward probabilities do not change (stable) and one in which reward probabilities periodically change (volatile). We addressed the following questions: (1) Is mood affected by the groundhog learning experience? (2) Do mood dynamics adjust to environmental volatility?
+
+\hypertarget{methods}{%
+\section{Methods}\label{methods}}
+
+We report how we determined our sample size, all data exclusions (if any), all manipulations, and all measures in the study.
+
+\hypertarget{a-computational-model-of-momentary-subjective-well-being}{%
+\section{A computational model of momentary subjective well-being}\label{a-computational-model-of-momentary-subjective-well-being}}
+
+Modeling instantaneous well-being in a probabilistic reversal learning task requires capturing how recent choices, outcomes, and changes in contingencies affect a participant's mood. Similarly to Rutledge, Skandali, Dayan, and Dolan (2014), we employed a linear approach where the impact of past events decays exponentially:
+
+\[
+\text{Happiness}_t = w_0 + w_1 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot O_j + w_2 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot R_j + w_3 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot S_j + w_4 \cdot \sum_{j=1}^{t} \gamma^{(t-j)} \cdot \Delta P_j,
+\]
+
+where \(t\) is the trial number, \(w_0\) is a constant term, \(w_1, w_2, w_3,\) and \(w_4\) are weights capturing the influence of different event types, \(\gamma\) is a forgetting factor \((0 \leq \gamma \leq 1)\) making events in more recent trials more influential than those in earlier trials, \(O_j\) is the outcome (+1 or -1) on trial \(j\), \(R_j\) is a binary variable indicating a reversal on trial \(j\) (1 if there was a reversal, 0 otherwise), \(S_j\) is the chosen stimulus on trial \(j\) (coded as 1 for stimulus A and -1 for stimulus B), \(\Delta P_j\) is the change in probability associated with the chosen stimulus on trial \(j\) (e.g., from 0.8 to 0.2 or from 0.2 to 0.8).
+
+The parameters' estimation was carried out by defining a function to compute the predicted happiness based on the model, a function to compute the negative log-likelihood, and then using an optimization function to find the maximum likelihood estimates of the parameters \(w_0, w_1, w_2, w_3,\) and \(w_4\), and \(\gamma\).
+
+\hypertarget{participants}{%
+\subsection{Participants}\label{participants}}
+
+\hypertarget{material}{%
+\subsection{Material}\label{material}}
+
+\hypertarget{procedure}{%
+\subsection{Procedure}\label{procedure}}
+
+\hypertarget{data-analysis}{%
+\subsection{Data analysis}\label{data-analysis}}
+
+We used R (Version 4.3.1; R Core Team, 2023) and the R-packages \emph{papaja} (Version 0.1.2; Aust \& Barth, 2023), and \emph{tinylabels} (Version 0.2.4; Barth, 2023) for all our analyses.
+
+\hypertarget{results}{%
+\section{Results}\label{results}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Intercept (0.10)}: The estimated intercept is positive and statistically different from zero (as per the 95\% credible interval {[}0.04, 0.15{]}), which suggests that there is a general improvement in mood after the task when all other variables are set to their reference levels.
+\item
+  \textbf{is\_reversal1 (-0.12)}: This variable is negative and significantly different from zero ({[}95\% CI: -0.18, -0.05{]}), indicating that the mood tends to be worse when there is a reversal in the task compared to when there isn't, all else being equal.
+\item
+  \textbf{z1, \ldots, z4, zg}: These variables seem to have mixed effects on mood change. \texttt{z1} has a positive effect (0.06, CI: 0.02, 0.09), suggesting that as \texttt{z1} increases, the mood improvement is likely to be higher. \texttt{zg} has a negative effect, although it is small (-0.04, CI: -0.08, -0.01).
+\item
+  \textbf{control\_c (0.01)}: The variable for perceived control doesn't seem to have a statistically significant effect on mood change ({[}95\% CI: -0.02, 0.05{]}).
+\item
+  \textbf{mood\_pre\_c (-0.71)}: This variable has a large, significant negative effect ({[}95\% CI: -0.75, -0.67{]}). Since you've centered mood by user, this suggests a strong regression toward the mean: individuals with higher initial mood tend to have a larger decrease.
+\item
+  \textbf{Interaction Terms (is\_reversal1:z1, \ldots, is\_reversal1:zg)}: The interaction terms explore how the effect of \texttt{is\_reversal} on mood change is modulated by the z-variables. For instance, \texttt{is\_reversal1:z1} is positive (0.06, CI: 0.02, 0.10), suggesting that the negative effect of a reversal on mood is less pronounced when \texttt{z1} is higher.
+\end{enumerate}
+
+About the random Effects:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{\textasciitilde user\_id and \textasciitilde user\_id:ema\_number\_c}: Both these random effects are significant, suggesting substantial variability in mood changes both between different users and between different sessions for the same user.
+\end{enumerate}
+
+\hypertarget{interpretation}{%
+\subsubsection{Interpretation:}\label{interpretation}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \textbf{Mood Generally Improves}: The positive intercept suggests that mood generally improves after the task.
+\item
+  \textbf{Reversal Worsens Mood}: A reversal in the task tends to worsen the mood.
+\item
+  \textbf{Modulation by z-variables}: Some z-variables like \texttt{z1} seem to buffer against the negative effect of a reversal, while others like \texttt{zg} seem to exacerbate it.
+\item
+  \textbf{Control Doesn't Matter Much}: Perceived control doesn't seem to significantly affect mood change.
+\item
+  \textbf{Regression to Mean}: There is a strong regression to the mean in mood changes.
+\item
+  \textbf{Individual Differences}: There are significant individual differences both between users and between sessions for the same user.
+\end{enumerate}
+
+Given your interest in whether mood improves after the task and how this is influenced by other variables, it appears that mood generally improves but this can be modulated by factors like reversals in the task and certain individual parameters (\texttt{z1}, \texttt{zg}).
+
+\hypertarget{discussion}{%
+\section{Discussion}\label{discussion}}
+
+\newpage
+
+\hypertarget{references}{%
+\section{References}\label{references}}
+
+\hypertarget{refs}{}
+\begin{CSLReferences}{1}{0}
+\leavevmode\vadjust pre{\hypertarget{ref-R-papaja}{}}%
+Aust, F., \& Barth, M. (2023). \emph{{papaja}: {Prepare} reproducible {APA} journal articles with {R Markdown}}. Retrieved from \url{https://github.com/crsh/papaja}
+
+\leavevmode\vadjust pre{\hypertarget{ref-R-tinylabels}{}}%
+Barth, M. (2023). \emph{{tinylabels}: Lightweight variable labels}. Retrieved from \url{https://cran.r-project.org/package=tinylabels}
+
+\leavevmode\vadjust pre{\hypertarget{ref-R-base}{}}%
+R Core Team. (2023). \emph{R: A language and environment for statistical computing}. Vienna, Austria: R Foundation for Statistical Computing. Retrieved from \url{https://www.R-project.org/}
+
+\leavevmode\vadjust pre{\hypertarget{ref-rutledge2014computational}{}}%
+Rutledge, R. B., Skandali, N., Dayan, P., \& Dolan, R. J. (2014). A computational and neural model of momentary subjective well-being. \emph{Proceedings of the National Academy of Sciences}, \emph{111}(33), 12252--12257.
+
+\end{CSLReferences}
+
+\newpage
+
+\hypertarget{supplementary-materials}{%
+\section{Supplementary Materials}\label{supplementary-materials}}
+
+
+\end{document}

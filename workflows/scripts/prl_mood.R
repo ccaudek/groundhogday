@@ -18,7 +18,7 @@ library("sjPlot")
 library("sjstats")
 library("lme4")
 library("brms")
-library(bayesplot)
+library("bayesplot")
 library("effectsize")
 library("scales")
 library("sjPlot")
@@ -36,14 +36,13 @@ d1 <- readRDS("data/prep/groundhog_all_clean.RDS")
 
 # DATA WRANGLING ---------------------------------------------------------------
 
-d1$user_id <- factor(d1$user_id)
+d1$user_id <- as.numeric(d1$user_id)
 
 d <- d1 |> 
-  dplyr::filter(!is.na(user_id) & ema_number < 12)
+  dplyr::filter(!is.na(user_id) & ema_number < 13)
 
 length(unique(d$user_id))
 # [1] 224
-
 
 # The variable ema_number represents the consecutive order of the EMA 
 # sessions for each subject.
@@ -57,9 +56,119 @@ temp <- d |>
     mx = max(ema_number)
   )
 
-mean(temp$mx)
-# [1] 7.647343
+mean(temp$mx) / max(d$ema_number)
+# 0.8214286
 
+
+d |> 
+  group_by(is_reversal, ema_number) |> 
+  summarize(
+    mood_pre = mean(mood_pre),
+    mood_post = mean(mood_post),
+    control = mean(control),
+    n = n()
+  ) |> 
+  as.data.frame()
+
+
+
+
+# Accuracy and environmental volatility ----------------------------------------
+
+# Participants chose the option with the higher expected value (i.e. choice 
+# accuracy) more often than chance in the stable environment and in the 
+# volatile environment. Participants chose the higher probability option 
+# more often in the stable environment than in the volatile environment.
+
+is_reversal_df <- d |> 
+  group_by(user_id, is_reversal) |> 
+  summarize(
+    acc = mean(accuracy, na.rm = TRUE)
+  ) |> 
+  ungroup()
+
+mod_acc <- brm(
+  acc ~ is_reversal +
+    (is_reversal | user_id),
+  family = zero_one_inflated_beta(link = "logit"),
+  algorithm = "meanfield",
+  iter = 30000,
+  data = is_reversal_df
+)
+pp_check(mod_acc)
+bayes_R2(mod_acc)
+summary(mod_acc)
+conditional_effects(mod_acc, "is_reversal")
+
+# Extract the posterior samples for Intercept and is_reversal
+post_samples_no <- post_samples$b_Intercept
+post_samples_yes <- post_samples$b_Intercept + post_samples$b_is_reversalyes
+
+# Compute posterior means
+post_mean_no <- mean(post_samples_no)
+post_mean_yes <- mean(post_samples_yes)
+
+# Compute 95% confidence intervals
+post_ci_no <- quantile(post_samples_no, probs = c(0.025, 0.975))
+post_ci_yes <- quantile(post_samples_yes, probs = c(0.025, 0.975))
+
+# Convert from logit to probability scale
+post_mean_no_prob <- plogis(post_mean_no)
+post_mean_yes_prob <- plogis(post_mean_yes)
+post_ci_no_prob <- plogis(post_ci_no)
+post_ci_yes_prob <- plogis(post_ci_yes)
+
+# Print results
+print("For is_reversal == 'no':")
+print(paste("Posterior mean:", post_mean_no_prob))
+print(paste("95% CI:", post_ci_no_prob))
+print("For is_reversal == 'yes':")
+print(paste("Posterior mean:", post_mean_yes_prob))
+print(paste("95% CI:", post_ci_yes_prob))
+
+
+# Relation between mood_pre and ema_number -------------------------------------
+
+d |> 
+  group_by(user_id, is_reversal, ema_number) |> 
+  summarize(
+    mood_pre = mean(mood_pre),
+    mood_post = mean(mood_post)
+  ) |> 
+  group_by(is_reversal, ema_number) |> 
+  summarize(
+    mp = mean(mood_pre),
+    sdterr = sd(mood_pre, na.rm = TRUE) / sqrt(n()),
+    mpo = mean(mood_post)
+  ) |> 
+  ggplot(aes(x=ema_number, y=mp)) + 
+  geom_line() +
+  geom_point()+
+  geom_errorbar(aes(ymin=mp-sdterr, ymax=mp+sdterr), width=.2) +
+  facet_wrap(~ is_reversal)
+
+mood_df <- d |> 
+  group_by(user_id, is_reversal, ema_number) |> 
+  summarize(
+    mood_pre = mean(mood_pre),
+    mood_post = mean(mood_post),
+    control = mean(control)
+  ) |> 
+  ungroup()
+
+fm1 <- brm(
+  mood_pre ~ control + is_reversal * ema_number + 
+    (control + is_reversal * ema_number | user_id),
+  family = asym_laplace(),
+  # backend = "cmdstanr",
+  algorithm = "meanfield",
+  data = mood_df
+  )
+summary(fm1)
+pp_check(fm1)
+marginal_effects(fm1, "control:ema_number")
+bayes_R2(fm1)
+  
 
 # QUESTION ---------------------------------------------------------------------
 # Does is_target_chosen depend on mood_pre?
@@ -67,9 +176,10 @@ mean(temp$mx)
 tgt_data <- d |> 
   # dplyr::filter(is_reversal == "yes") |> 
   dplyr::select(
-    is_reversal, is_target_chosen, feedback,
+    is_reversal, is_target_chosen, feedback, instant_mood, 
     accuracy, mood_pre, control, trial, ema_number, user_id
   )
+tgt_data$instant_mood_z <- as.vector(scale(tgt_data$instant_mood))
 tgt_data$mood_pre_z <- as.vector(scale(tgt_data$mood_pre))
 tgt_data$control_z <- as.vector(scale(tgt_data$control))
 tgt_data$trial_c <- 
@@ -92,15 +202,17 @@ plot_model(mod_l1, type = "pred", terms = c("control_z"))
 plot_model(mod_l1, type = "pred", terms = c("mood_pre_z"))
 
 
-# brms analysis ----------------------------------------------------------------
+# brms analysis
 
 mod1 <- brm(
-  is_target_chosen ~ is_reversal*mood_pre_z + control_z + trial_c + 
-    ema_number_c + 
-    (is_reversal*mood_pre_z + control_z + trial_c + ema_number_c | user_id),
+  is_target_chosen ~ is_reversal * 
+    (mood_pre_z + instant_mood_z + control_z + trial_c + ema_number_c) + 
+    (is_reversal * (mood_pre_z + instant_mood_z + control_z + trial_c + 
+                      ema_number_c) | user_id),
   family = bernoulli(),
   algorithm = "meanfield",
-  init = 0.1, 
+  iter = 20000,
+  init = 0.01, 
   data = tgt_data
 )
 
@@ -112,13 +224,14 @@ pp_check(mod1,
          ndraws = 1000,
          binwidth = .001)
 
-conditional_effects(mod1, "trial_c")
-conditional_effects(mod1, "ema_number_c")
-conditional_effects(mod1, "control_z")
-conditional_effects(mod1, "is_reversal")
+conditional_effects(mod1, "instant_mood_z:is_reversal")
+conditional_effects(mod1, "trial_c:is_reversal")
+conditional_effects(mod1, "ema_number_c:is_reversal")
+conditional_effects(mod1, "control_z:is_reversal")
 conditional_effects(mod1, "mood_pre_z:is_reversal")
 
 bayes_R2(mod1)
+summary(mod1)
 
 
 # LOO comparison ---------------------------------------------------------------
@@ -159,8 +272,8 @@ loo_compare(loo1, loo1a)
 
 
 mod_l2 <- glmer(
-  feedback ~ mood_pre_z + control_z + trial_c + ema_number_c + 
-    (mood_pre_z + control_z + trial_c + ema_number_c | user_id),
+  feedback ~ is_reversal * (mood_pre_z + control_z + trial_c + ema_number_c) + 
+    (is_reversal * (mood_pre_z + control_z + trial_c + ema_number_c) | user_id),
   family = binomial(link = "logit"),
   data = tgt_data
 )
@@ -410,8 +523,7 @@ plot(
 
 
 
-
-# QUESTION  
+# QUESTION ---------------------------------------------------------------------
 # Does gain increase as a function of ema_number?
 
 d |> 
@@ -615,9 +727,129 @@ lines(sort(foo$trial),                 # Draw polynomial regression curve
       col = "red",
       type = "l")
 
-#----------------
-# Instant mood.
-#----------------
+
+# QUESTION ---------------------------------------------------------------------
+# Instant mood as a function of trial and is_reversal.
+
+summary(d$mood_pre)
+
+avg_im_df <- d |> 
+  group_by(user_id, is_reversal, trial) |> 
+  summarize(
+    im = mean(instant_mood, na.rm = TRUE)
+  ) |> 
+  group_by(is_reversal, trial) |> 
+  summarize(
+    imood = mean(im, na.rm = TRUE)
+  )
+
+avg_im_df |> 
+  ggplot(aes(x=trial, y=imood)) +
+  geom_line() +
+  facet_wrap(~is_reversal)
+
+
+hist(d$instant_mood)
+
+norev_df <- d |> 
+  dplyr::filter(is_reversal == "no")
+
+norev_df$epoch <- ifelse(norev_df$trial < 16, 0, 1)
+norev_df$epoch <- factor(norev_df$epoch)
+
+fm1 <- lmer(
+  instant_mood ~ mood_pre * (trial + epoch) + 
+    (mood_pre * (trial * epoch) | user_id),
+  data = norev_df
+)
+summary(fm1)
+
+rev_df <- d |> 
+  dplyr::filter(is_reversal == "yes")
+
+rev_df$epoch <- factor(rev_df$epoch)
+
+fm2 <- lmer(
+  instant_mood ~ mood_pre * (trial + epoch) + 
+    (mood_pre * (trial * epoch) | user_id),
+  data = rev_df
+)
+summary(fm2)
+
+rev_df$t <- ifelse(
+  rev_df$trial < 16, rev_df$trial, rev_df$trial - 15
+)
+
+
+m12 <- brm(
+  instant_mood ~ mood_pre * t * epoch + 
+    (mood_pre * t * epoch | user_id),
+  family=cumulative("logit"),
+  algorithm = "meanfield",
+  iter = 30000,
+  data = rev_df
+)
+pp_check(m12)
+summary(m12)
+
+marginal_effects(m12, "mood_pre:epoch")
+marginal_effects(m12, "t")
+
+
+# Reward prediction error ------------------------------------------------------
+
+# Initialize the Rescorla-Wagner model parameters for each subject and session
+alpha <- 0.001  # Learning rate
+
+# Assuming you have columns 'subject_id' and 'session_id' in your data frame
+subjects <- unique(d$user_id)
+sessions <- unique(d$ema_number)
+
+# Iterate through subjects and sessions
+for (subject in subjects) {
+  for (session in sessions) {
+    # Subset the data for the current subject and session
+    subset_df <- d[d$user_id == subject[1] & d$ema_number == session[1], ]
+    
+    # Initialize the expected values for stimuli a and b for this subject and session
+    V <- c(0, 0)  # Use a numeric vector
+    
+    # Iterate through the rows of the subset data frame and calculate RPE
+    for (i in 1:nrow(subset_df)) {
+      feedback <- subset_df$feedback[i]
+      stimulus <- subset_df$stimulus[i]
+      
+      # Calculate the RPE using the Rescorla-Wagner formula
+      rpe <- feedback - V[stimulus + 1]  # Index adjustment
+      
+      # Update the expected value for the chosen stimulus
+      V[stimulus + 1] <- V[stimulus + 1] + alpha * rpe  # Index adjustment
+      
+      # Store the RPE value back in the original data frame
+      d$RPE_RW[d$user_id == subject & d$ema_number == session][i] <- rpe
+    }
+  }
+}
+
+
+rpe_im_df <- d |> 
+  group_by(user_id, is_reversal, trial) |> 
+  summarize(
+    im = mean(instant_mood, na.rm = TRUE),
+    rpe = mean(RPE_RW, na.rm = TRUE)
+  ) |> 
+  group_by(is_reversal, trial) |> 
+  summarize(
+    m_rpe = mean(rpe, na.rm = TRUE)
+  )
+
+rpe_im_df |> 
+  ggplot(aes(x=trial, y=m_rpe)) +
+  geom_line() +
+  facet_wrap(~is_reversal)
+
+
+
 # Regression Discontinuity
 # https://mixtape.scunning.com/06-regression_discontinuity
 

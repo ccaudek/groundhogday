@@ -1,0 +1,245 @@
+---
+title: "Supplementary Text, Figures, and Tables"
+# author: "Supplementary Materials"
+output:
+  pdf_document:
+      toc: true
+      toc_depth: 2
+csl: apa7.csl
+bibliography: supmat.bib
+fontsize: 12pt
+linestretch: 1.1
+---
+
+```{r setup1, message = FALSE, warning = FALSE, include = FALSE, results = "hide"}
+library("tidyverse")
+library("patchwork")
+library("ggridges")
+library("papaja")
+library("broom")
+library("lme4")
+library("brms")
+library("texreg")
+library("here")
+library("tidyverse")
+library("stringr")
+library("broom.mixed")
+library("kableExtra")
+library("cowplot")
+library("emmeans")
+library("rstanarm")
+library("effectsize")
+library("tidyverse")
+library("sjPlot")
+library("sjstats")
+library("lme4")
+library("brms")
+library("bayesplot")
+library("effectsize")
+library("scales")
+library("sjPlot")
+library("sjmisc")
+
+# enables / disables caching for all chunks of code
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+```{r set-options_sm, echo = FALSE, cache = FALSE}
+knitr::opts_chunk$set(fig.retina = 2.5)
+options(width = 100)
+```
+
+\pagebreak
+
+# Supplementary Methods
+
+## Participants
+
+The study included 40 individuals diagnosed with Restricting-Type Anorexia Nervosa (R-AN) according to the DSM-5 criteria and 310 healthy volunteers. The participants with R-AN were recruited from three facilities in Italy: the Specchidacqua Institute in Montecatini (Pisa), the Villa dei Pini Institute in Firenze, and the Gruber Center, Outpatient Clinic in Bologna. The treatment approach consisted of Cognitive Behavioral Therapy and family-based treatment, with patients receiving treatment for 2 to 6 hours per day, 2 days per week. The treatment program included various components such as individual therapy, family therapy, group therapy, nutritional counseling, psychiatric care, and medical monitoring. The diagnosis of AN was made by specialized psychiatrists and psychologists through a semi-structured interview based on the DSM-5 criteria, at the start of treatment.
+
+To ensure the relevance of our findings to the broader psychiatric population, individuals with R-AN who had comorbid psychiatric conditions were included in the study. The presence of comorbidities was determined by specialized psychiatrists and psychologists using a semi-structured interview based on the Mini International Neuropsychiatric Interview (MINI). Among the 40 individuals with R-AN, comorbidities included anxiety disorder (n=16), obsessive-compulsive disorder (OCD) (n=8), social phobia (n=1), and depressive and anxiety disorders (n=1). Some R-AN patients were also taking medication, including anxiolytic antidepressants (n=10), Selective Serotonin Reuptake Inhibitors (SSRIs) (n=6), benzodiazepines (n=1), and mood stabilizers (lithium) (n=1).
+
+The control group consisted of 310 adolescent or young-adult females recruited through social media or university advertisements. All participants completed the Eating Attitudes Test-26 (EAT-26) screening tool. Females who scored higher than 20 on the EAT-26 and did not report any current treatment for eating disorders were classified as "at-risk" and assigned to the reference/independent (RI) group, resulting in a total of 36 individuals. From the remaining participants who scored lower than 20 on the EAT-26 and did not report any current treatment for eating disorders, a random sample of 45 females was selected and assigned to the healthy control (HC) group. Both the RI and HC groups had participants with a normal Body Mass Index (BMI).
+
+To be eligible for participation, individuals needed to be proficient in spoken and written Italian. Exclusion criteria for all participants included a history of alcohol or drug abuse or dependence, neurological disorders, past or present psychiatric diagnosis, and intellectual or developmental disability. Cognitive function within the normal range was assessed using the Raven's Standard Progressive Matrices test. The eligibility criteria for all participants were evaluated through psychologist interviews. Body mass index (BMI) values were determined in the laboratory.
+
+The study included a predominantly Caucasian sample, with 97.7% of the participants identifying as Caucasian. A smaller proportion of participants identified as Asian-Italian (1.7%) and African-Italian (0.6%). Additionally, all selected participants were right-handed and were unaware of the specific objectives of the study, ensuring a blind study design.
+
+\pagebreak
+
+# Participants sample 
+
+# Mood variation modeling
+
+We used a mixed-effect model to describe the variation in reported mood before and after the learning session (`mood_dif = mood_post - mood_pre`) as a function of the parameters of the momentary subjective well-being model and additional variable. Specifically, the learning environment (stable or volatile), `is_reversal`, its interactions with the subjective well-being model's parameters, and, as control covariates, the level of mood before the learning session [@tennant2022analyses], and the perceived control of the salient event.
+
+```
+mod <- brm(
+  mood_dif ~ is_reversal * (z1 + z2 + z3 + z4 + zg) + 
+    control_c + mood_pre_c +
+    (is_reversal | user_id/ema_number_c),
+  family = student(),
+  algorithm = "meanfield",
+  iter = 40000,
+  data = temp
+)
+```
+
+The subjective well-being model's parameters were standardized prior to model's fitting. Moreover, control and mood_pre were mean-centered for each participant. The results are the following.
+
+
+1. **Intercept (0.10)**: The estimated intercept is positive and statistically different from zero (as per the 95% credible interval [0.04, 0.15]), which suggests that there is a general improvement in mood after the task when all other variables are set to their reference levels.
+2. **is_reversal1 (-0.12)**: This variable is negative and significantly different from zero ([95% CI: -0.18, -0.05]), indicating that the mood tends to be worse when there is a reversal in the task compared to when there isn't, all else being equal.
+3. **z1, ..., z4, zg**: These variables seem to have mixed effects on mood change. `z1` has a positive effect (0.06, CI: 0.02, 0.09), suggesting that as `z1` increases, the mood improvement is likely to be higher. `zg` has a negative effect, although it is small (-0.04, CI: -0.08, -0.01).
+4. **control_c (0.01)**: The variable for perceived control doesn't seem to have a statistically significant effect on mood change ([95% CI: -0.02, 0.05]).
+5. **mood_pre_c (-0.71)**: This variable has a large, significant negative effect ([95% CI: -0.75, -0.67]). Since you've centered mood by user, this suggests a strong regression toward the mean: individuals with higher initial mood tend to have a larger decrease.
+6. **Interaction Terms (is_reversal1:z1, ..., is_reversal1:zg)**: The interaction terms explore how the effect of `is_reversal` on mood change is modulated by the z-variables. For instance, `is_reversal1:z1` is positive (0.06, CI: 0.02, 0.10), suggesting that the negative effect of a reversal on mood is less pronounced when `z1` is higher.
+
+About the random Effects:
+
+1. **~user_id and ~user_id:ema_number_c**: Both these random effects are significant, suggesting substantial variability in mood changes both between different users and between different sessions for the same user.
+
+### Interpretation:
+
+
+
+
+
+## Age
+
+In our initial statistical analysis, we investigated if there were any differences in age among the groups (AN = Anorexia Nervosa, HC = Healthy Controls, RI = participants who were at risk of developing eating disorders but had not received a formal diagnosis).
+
+The mean age and standard deviation by group is shown below.
+
+```{r import_data, message = FALSE, warning = FALSE, include = FALSE, results = "hide"}
+d1 <- readRDS(here::here("data", "prep", "groundhog_all_clean.RDS"))
+d1$user_id <- as.numeric(d1$user_id)
+d <- d1 |> 
+  dplyr::filter(!is.na(user_id) & ema_number < 13)
+# length(unique(d$user_id))
+```
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+quest_param_df <- readr::read_csv(
+  here::here("data", "processed", "quest", "quest3grp.csv")
+)
+
+quest_param_df <- quest_param_df |> 
+  dplyr::rename("group" = "diag_cat")
+
+quest_param_df$group <- factor(quest_param_df$group)
+quest_param_df$group <- relevel(quest_param_df$group, ref = "AN")
+# contrasts(quest_param_df$group)
+```
+
+```{r}
+age_df <- quest_param_df |> 
+  dplyr::select(
+    age, group, subj_code
+  )
+age_df <- distinct(age_df, subj_code, .keep_all = TRUE)
+
+age_df |> 
+  group_by(group) |> 
+  summarize(
+    avg_age = mean(age),
+    SD = sd(age)
+  ) |> 
+   kable(digits = 2)
+```
+
+\vspace{5mm}
+
+We used Bayesian regression to examine the age differences among groups.
+
+```{r, message=FALSE, warning=FALSE, cache=TRUE}
+m1 <- brm(
+  age ~ group,
+  data = age_df,
+  family = asym_laplace(),
+  iter = 4000,
+  cores = parallel::detectCores(),
+  backend = "cmdstan",
+  refresh = 0,
+  silent = TRUE
+)
+```
+
+### Posterior predictive check
+
+```{r, echo=FALSE}
+pp_check(m1) +
+  theme_cowplot()
+```
+
+\vspace{5mm}
+
+### Model's coefficients
+
+The estimations obtained for the model are summarized in Table below, which includes the mean, the standard error, and the lower and upper bounds of the 95% credible interval of the posterior distribution for each parameter. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+tidy(m1, effect="fixed", conf.method="HPDinterval", prob = 0.95) |>
+  dplyr::select("term", "estimate", "std.error", "conf.low", "conf.high") |>
+   kable(digits = 3)
+```
+
+\vspace{5mm}
+
+The 95% credibility intervals for the difference in age between each group and the HC baseline included zero, indicating that there were no credible differences in age among the groups.
+
+### Predicted effect of group on age
+
+```{r, echo=FALSE}
+c_eff <- conditional_effects(m1, "group")
+plot(c_eff, plot = FALSE)[[1]] + 
+  labs(
+    y = "Age (years)",
+    x = "Group") +
+  theme_cowplot() + 
+  coord_flip()
+```
+
+### Cohen's d
+
+```{r}
+# R-AN vs HC
+delta_t <-
+    # extracting posterior samples from m1
+    posterior_samples(m1, pars = c("^b_", "sd_", "sigma")) %>% 
+    # taking the square of each variance component
+    mutate_at(.vars = 4, .funs = funs(.^2) ) %>%
+    # dividing by the square root of the sum of all variance components
+    mutate(delta = b_groupHC / sqrt(rowSums(.[4]) ) )
+
+quantile(delta_t$delta, c(0.025, 0.5, 0.975))
+```
+
+```{r}
+# R-AN vs RI
+delta_t <-
+    # extracting posterior samples from m1
+    posterior_samples(m1, pars = c("^b_", "sd_", "sigma")) %>% 
+    # taking the square of each variance component
+    mutate_at(.vars = 4, .funs = funs(.^2) ) %>%
+    # dividing by the square root of the sum of all variance components
+    mutate(delta = b_groupRI / sqrt(rowSums(.[4]) ) )
+
+quantile(delta_t$delta, c(0.025, 0.5, 0.975))
+```
+
+```{r}
+emmeans(m1, pairwise ~ group)
+```
+
+
+
+# References
+
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+\setlength{\parskip}{8pt}
+\noindent
+
