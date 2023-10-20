@@ -1,0 +1,332 @@
+---
+title: "Momentary Subjective Happiness and APRL"
+subtitle: "Groundhog Day Project"
+author: "Corrado Caudek"
+date: "20/10/2023"
+format: pdf
+editor: visual
+---
+
+## Autobiographical Probabilistic Reversal Learning (APRL) Task
+
+### Task Design
+
+We employed a novel task that we refer to as Autobiographical Probabilistic Reversal Learning (APRL). This task combines elements of traditional Probabilistic Reversal Learning (PRL) with an autobiographical reflective component, wherein participants reconsider their actions during the most salient event of their day.
+
+Participants were prompted in the evening to reflect on the most salient event of their day. Following this reflective period, they engaged in a PRL task that consisted of 30 choice trials per session. In each trial, participants were asked to make one of two decisions: either "I would act as I did" or "I would choose the opposite course of action."
+
+After making their choice, participants received feedback in a manner consistent with standard PRL tasks. The learning environment was manipulated to be either "volatile" or "stable." In the volatile environment, a reversal in reward probabilities occurred after the 15th trial. In contrast, the stable environment maintained constant reward probabilities throughout all 30 trials.
+
+For both types of environments, the initial reward probabilities were set at 0.2 for choosing "the same action as actually happened" and 0.2 for opting for "the opposite course of action." In the volatile environment, these probabilities switched after the 15th trial, whereas in the stable environment, they remained constant.
+
+## Prelims
+
+```{r}
+# Load necessary library
+suppressPackageStartupMessages({
+    library("here")
+    library("tidyverse")
+    library("mice")
+    library("lme4")
+    library("brms")
+    library("bayesplot")
+    library("effectsize")
+    library("scales")
+    library("sjstats")
+    library("sjPlot")
+    library("sjmisc")
+})
+```
+
+Source functions
+
+```{r}
+source(
+    here::here("workflows", "scripts", "funs", "funs_instant_mood.R")
+)
+```
+
+## Import Data
+
+```{r}
+#| output: false
+
+# This script requires the dataframe d from prl_mood.R.
+d1 <- readRDS(
+    here::here(
+        "data", "prep", "groundhog_all_clean.RDS"
+    )
+)
+
+d1$user_id <- as.numeric(d1$user_id)
+
+# Remove last ema sessions because compliance is too low
+d <- d1 |>
+    dplyr::filter(!is.na(user_id) & ema_number < 13)
+
+length(unique(d$user_id))
+```
+
+## Data Wrangling
+
+```{r}
+set.seed(123)
+
+# Standardize momentary mood by user_id.
+dz <- d |>
+    group_by(user_id) |>
+    mutate(
+      zim = as.vector(scale(instant_mood, center = TRUE, scale = TRUE))
+    ) |>
+    ungroup()
+
+# Remove participants because of convergence problems.
+bad_id_indices <- c(93, 99, 127, 146, 195, 216)
+user_id_codes <- unique(dz$user_id)
+
+bad_codes <- c(
+    user_id_codes[bad_id_indices],
+    3338029881, 3665345709, 3248648540
+)
+
+good_codes <- setdiff(user_id_codes, bad_codes)
+dz_clean <- dz[dz$user_id %in% good_codes, ]
+
+# Get list of unique user_ids
+user_id_codes <- unique(dz_clean$user_id)
+length(user_id_codes)
+```
+
+## Model of Momentary Subjective Well-Being
+
+Estimation of the parameters of the Model of subjective well-being (ispired by [**https://doi.org/10.1073/pnas.1407535111**](https://doi.org/10.1073/pnas.1407535111)).
+
+```{r}
+# Apply the function process_user() to each user_id.
+par_list <- NULL
+results_list <- lapply(user_id_codes, process_user)
+```
+
+```{r}
+#| output: false
+
+# Bind all data frames together into a single data frame
+all_results_df <- bind_rows(results_list)
+
+# Add mood_pre, mood_post, control.
+bysubj_mood_df <- dz_clean |>
+    group_by(user_id, ema_number) |>
+    summarize(
+        mood_pre = mean(mood_pre),
+        mood_post = mean(mood_post),
+        control = mean(control)
+    ) |>
+    ungroup()
+
+# Final dataframe.
+results_df <- left_join(
+    all_results_df, bysubj_mood_df,
+    by = c("user_id", "ema_number")
+)
+
+names(results_df)
+```
+
+## Examine and Clean Parameters
+
+```{r}
+plot(density(results_df$w0))
+plot(density(results_df$w1))
+plot(density(results_df$w2))
+plot(density(results_df$w3))
+plot(density(results_df$w4))
+plot(density(results_df$w5))
+plot(density(results_df$gamma))
+plot(density(results_df$alpha))
+```
+
+```{r}
+remove_outliers <- function(my_vector) {
+    # Calculate mean and standard deviation
+    mean_val <- mean(my_vector, na.rm = TRUE)
+    std_dev <- sd(my_vector, na.rm = TRUE)
+    # Calculate Z-scores
+    z_scores <- (my_vector - mean_val) / std_dev
+    # Replace outliers with NA
+    my_vector[abs(z_scores) > 3.5] <- NA
+    my_vector
+}
+
+results_df$w1 <- remove_outliers(results_df$w1)
+results_df$w2 <- remove_outliers(results_df$w2)
+results_df$w3 <- remove_outliers(results_df$w3)
+results_df$w4 <- remove_outliers(results_df$w4)
+results_df$w5 <- remove_outliers(results_df$w5)
+results_df$gamma <- remove_outliers(results_df$gamma)
+results_df$mood_pre <- remove_outliers(results_df$mood_pre)
+results_df$mood_post <- remove_outliers(results_df$mood_post)
+
+# Remove and impute the values alpha = 0 ad alpha = 1
+results_df$alpha <- ifelse(
+  results_df$alpha < 0.00001 | results_df$alpha > 0.99999, 
+  NA, results_df$alpha
+  )
+```
+
+Imputation of missing data.
+
+```{r}
+#| warning: false
+imputed_cart <- complete(mice(results_df, method = "cart"))
+```
+
+## Data wrangling
+
+```{r}
+# Difference post - pre on the raw mood data.
+bysubj_df <- imputed_cart |>
+  mutate(
+    # The mood_pre and mood_post outliers have been replaced
+    # with NAs and then imputed.
+    mood_dif = mood_post - mood_pre
+  ) 
+
+# Approximately centered:
+bysubj_df$ema_number_c = bysubj_df$ema_number - 4
+
+bysubj_df$environment <- ifelse(
+  bysubj_df$is_reversal == 1, "Volatile", "Stable"
+) 
+```
+
+## Effect of Environment on Alpha
+
+```{r}
+bysubj_df$alpha |> hist()
+```
+
+```{r}
+mod1 <- brm(
+    alpha ~ environment +
+      (environment | user_id / ema_number),
+    family = asym_laplace(),
+    algorithm = "meanfield",
+    data = bysubj_df,
+    refresh = 0
+)
+```
+
+```{r}
+pp_check(mod1) + xlim(0, 1)
+summary(mod1)
+bayes_R2(mod1)
+conditional_effects(mod1, "environment")
+```
+
+### Interpretation
+
+In a highly volatile environment, an agent might benefit from a higher α value, allowing it to rapidly update its expectations to adapt to the changing contingencies. A high α value places more weight on recent outcomes, making the agent more responsive to changes. The present data show that this is the case. This also indicates that participants completed the task in an appropriate manner.
+
+## Effect of **APRL** Task on Mood
+
+```{r}
+bysubj_df$mood_dif |> hist()
+```
+
+```{r}
+mod2 <- brm(
+  mood_dif ~ mood_pre + control + 
+    environment * (w1 + w2 + w3 + w4 + w5 + gamma) +
+    (mood_pre + control + environment | user_id / ema_number),
+  family = asym_laplace(),
+  algorithm = "meanfield",
+  data = bysubj_df,
+  refresh = 0
+)
+```
+
+```{r}
+loo2 <- loo(mod2)
+plot(loo2)
+```
+
+```{r}
+pp_check(mod2)  + xlim(-80, 80)
+```
+
+```{r}
+bayes_R2(mod2)
+summary(mod2)
+conditional_effects(mod2, "w1:environment") # w1: Outcome
+conditional_effects(mod2, "w2:environment") # w2: Reversal
+# w3: Stimulus
+conditional_effects(mod2, "w4") # w4: delta_p
+conditional_effects(mod2, "w5:environment") # w5: RPE
+# gamma
+conditional_effects(mod2, "environment")
+conditional_effects(mod2, "mood_pre")
+```
+
+## Effect of APRL on Mood (without Happiness parameters)
+
+```{r}
+mod3 <- brm(
+  mood_dif ~ mood_pre + control + environment +
+    (mood_pre + control + environment | user_id / ema_number),
+  family = asym_laplace(),
+  algorithm = "meanfield",
+  data = bysubj_df,
+  refresh = 0
+)
+```
+
+```{r}
+loo3 <- loo(mod3)
+plot(loo3)
+```
+
+Compare mod2, mod3 models (effect of the happiness model's parameters).
+
+```{r}
+loo_compare(loo2, loo3) 
+```
+
+for_plot_long_df \|\>
+
+ggplot(aes(x=ema_number, y=mood, color=cond)) +
+
+ggline() +
+
+facet_wrap(\~environment)
+
+```{r}
+for_plot_df <- bysubj_df |> 
+  group_by(environment, user_id, ema_number) |> 
+  summarize(
+    mood_pre = mean(mood_pre, trim = 0.2),
+    mood_post = mean(mood_post, trim = 0.2)
+  ) |> 
+  group_by(environment, ema_number) |> 
+  summarize(
+    mood_pre = mean(mood_pre, trim = 0.2),
+    mood_post = mean(mood_post, trim = 0.2)
+  ) |> 
+  ungroup()
+
+for_plot_long_df <- for_plot_df |> 
+  pivot_longer(
+    cols = starts_with("mood_"),
+    names_to = "cond",
+    values_to = "mood",
+    values_drop_na = TRUE
+  )
+
+for_plot_long_df |> 
+  ggplot(aes(x=ema_number, y=mood, color=cond)) +
+  geom_line() +
+  facet_wrap(~environment)
+```
+
+```{r}
+
+```

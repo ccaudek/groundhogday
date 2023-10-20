@@ -38,11 +38,15 @@ d1 <- readRDS("data/prep/groundhog_all_clean.RDS")
 
 d1$user_id <- as.numeric(d1$user_id)
 
+# Remove last ema sessions with too low compliance
 d <- d1 |> 
   dplyr::filter(!is.na(user_id) & ema_number < 13)
 
 length(unique(d$user_id))
 # [1] 224
+
+
+
 
 # The variable ema_number represents the consecutive order of the EMA 
 # sessions for each subject.

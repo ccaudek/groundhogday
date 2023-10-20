@@ -1,47 +1,40 @@
 # Analysis of momentary well-being in the PRL task.
+# This script computes the parameters of the momentary happiness model
+# for each user_id and each ema_number.
 
 # Load necessary library
-library(dplyr)
+library("here")
+library("tidyverse")
+library("mice")
+library("lme4")
+library("brms")
+library("bayesplot")
+library("effectsize")
+library("scales")
+library("sjstats")
+library("sjPlot")
+library("sjmisc")
+
+# Functions:
+source(here::here("workflows", "scripts", "funs", "funs_instant_mood.R"))
 
 
+# This script requires the dataframe d from prl_mood.R.
+d1 <- readRDS("data/prep/groundhog_all_clean.RDS")
 
-# ------------------------------------------------------------------------------
-# Groundhog data
+# DATA WRANGLING
+d1$user_id <- as.numeric(d1$user_id)
+# Remove last ema sessions with too low compliance
+d <- d1 |> 
+  dplyr::filter(!is.na(user_id) & ema_number < 13)
 
-# Function to compute the predicted happiness given parameters and data
-compute_predicted_happiness <- function(params, data) {
-  w0 <- params[1]
-  w1 <- params[2]
-  w2 <- params[3]
-  w3 <- params[4]
-  w4 <- params[5]
-  gamma <- params[6]
-  
-  predicted_happiness <- numeric(nrow(data))
-  
-  for (t in 1:nrow(data)) {
-    predicted_happiness[t] <- w0 +
-      w1 * sum(gamma^(t-1:(t-1)) * data$outcome[1:(t-1)]) +
-      w2 * sum(gamma^(t-1:(t-1)) * data$reversal[1:(t-1)]) +
-      w3 * sum(gamma^(t-1:(t-1)) * data$stimulus[1:(t-1)]) +
-      w4 * sum(gamma^(t-1:(t-1)) * data$delta_p[1:(t-1)])
-  }
-  
-  return(predicted_happiness)
-}
+length(unique(d$user_id))
+# [1] 224
 
-# Negative log-likelihood assuming normally distributed residuals
-nll <- function(params, data) {
-  predicted_happiness <- compute_predicted_happiness(params, data)
-  ssr <- sum((data$happiness - predicted_happiness)^2)
-  n <- nrow(data)
-  nll_value <- n/2 * log(2 * pi) + n/2 * log(ssr/n) + n/2
-  return(nll_value)
-}
 
-# Set seed for reproducibility
+# Data wrangling ---------------------------------------------------------------
+
 set.seed(123)
-
 
 # Standardize instant mood by user_id.
 dz <- d %>%
@@ -64,72 +57,18 @@ good_codes <- setdiff(user_id_codes, bad_codes)
 dz_clean <- dz[dz$user_id %in% good_codes, ]
 length(unique(dz_clean$user_id))
 
-
-
-# Define function to process a single user
-process_user <- function(id) {
-  
-  set.seed(12345)
-  
-  onesubj_data <- dz_clean |> 
-    dplyr::filter(user_id == id)
-  
-  n_ema_episodes <- length(unique(onesubj_data$ema_number))
-  
-  par_list <- list()
-  
-  for (i in seq_len(n_ema_episodes)) {
-    
-    ema_session <- onesubj_data |> 
-      dplyr::filter(ema_number == i)
-    
-    df <- data.frame(
-      trial = ema_session$trial,
-      stimulus = ifelse(
-        ema_session$is_target_chosen == 0, -1, ema_session$is_target_chosen
-      ), # 1 for stimulus A, -1 for stimulus B
-      reversal = c(rep(0, 14), 1, rep(0, 15)),  # Reversal occurs at trial 15
-      outcome = ifelse(ema_session$feedback == 0, -1, ema_session$feedback),
-      delta_p = c(rep(0, 14), 0.6, rep(0, 15)),  # Change in probability at reversal
-      happiness = ema_session$zim # standardized by user_id
-    )
-    
-    # Optimize
-    init_params <- c(0, 0, 0, 0, 0, 0.5)  # Initial guesses for w0, w1, w2, w3, w4, and gamma
-    opt_result <- optim(init_params, nll, data=df)
-    mle_params <- opt_result$par
-    # add further information
-    out <- c(
-      mle_params, 
-      ifelse(unique(ema_session$is_reversal) == "yes", 1, 0), i, id
-    )
-    
-    par_list[[i]] <- out
-  }
-  
-  # Convert list to dataframe
-  par_df <- do.call(rbind, par_list)
-  par_df <- as.data.frame(par_df)
-  colnames(par_df) <- c(
-    "w0", "w1", "w2", "w3", "w4", "gamma", 
-    "is_reversal", "ema_number", "user_id"
-  )
-  
-  cat('user_id:', unique(onesubj_data$user_id), '\n')
-  
-  return(par_df)
-}
-
 # Get list of unique user_ids
 user_id_codes <- unique(dz_clean$user_id)
 length(user_id_codes)
 
 # Apply process_user function to each user_id
+par_list <- NULL
 results_list <- lapply(user_id_codes, process_user)
 
 # Bind all data frames together into a single data frame
 all_results_df <- bind_rows(results_list)
 
+# Add mood_pre, mood_post, control.
 bysubj_mood_df <- dz_clean |> 
   group_by(user_id, ema_number) |> 
   summarize(
@@ -139,11 +78,15 @@ bysubj_mood_df <- dz_clean |>
   ) |> 
   ungroup()
 
-
+# Final dataframe.
 results_df <- left_join(
   all_results_df, bysubj_mood_df, by = c("user_id", "ema_number")
   )
 
+names(results_df)
+# [1] "w0"          "w1"          "w2"          "w3"          "w4"         
+# [6] "w5"          "gamma"       "is_reversal" "ema_number"  "user_id"    
+# [11] "alpha"       "mood_pre"    "mood_post"   "control"  
 
 
 # brms -------------------------------------------------------------------------
@@ -153,7 +96,10 @@ plot(density(results_df$w1))
 plot(density(results_df$w2))
 plot(density(results_df$w3))
 plot(density(results_df$w4))
+plot(density(results_df$w5))
 plot(density(results_df$gamma))
+plot(density(results_df$alpha))
+
 
 remove_outliers <- function(my_vector) {
   
@@ -175,102 +121,218 @@ results_df$cw1 <- remove_outliers(results_df$w1)
 results_df$cw2 <- remove_outliers(results_df$w2)
 results_df$cw3 <- remove_outliers(results_df$w3)
 results_df$cw4 <- remove_outliers(results_df$w4)
+results_df$cw5 <- remove_outliers(results_df$w5)
 results_df$cwg <- remove_outliers(results_df$gamma)
-results_df$cmood_pre <- ifelse(
-  results_df$mood_pre == 49 | results_df$mood_pre == -49, NA, 
-  results_df$mood_pre)
-results_df$cmood_post <- ifelse(
-  results_df$mood_post == 49 | results_df$mood_post == -49, NA, 
-  results_df$mood_post)
 
-results_df$cmood_pre <- remove_outliers(results_df$cmood_pre)
-results_df$cmood_post <- remove_outliers(results_df$cmood_post)
+results_df$cmood_pre <- remove_outliers(results_df$mood_pre)
+results_df$cmood_post <- remove_outliers(results_df$mood_post)
 
+FLAG_MOOD <- 0 # 0: keep mood data unchanged; 1: impute the values == 0
+if (FLAG_MOOD) {
+  # Remove and impute the values == 0
+  results_df$cmood_post <- ifelse(
+    results_df$cmood_post == 0, NA, results_df$cmood_post
+  )
 
+  results_df$cmood_pre <- ifelse(
+    results_df$cmood_pre == 0, NA, results_df$cmood_pre
+  )
+} else {
+  results_df$cmood_pre <- results_df$mood_pre
+  results_df$cmood_post <- results_df$mood_post
+}
+
+# Remove and impute the values alpha = 0 ad alpha = 1
+results_df$calpha <- ifelse(
+  results_df$alpha == 0 | results_df$alpha == 1, NA, results_df$alpha
+)
+
+# Remove redundant columns
 results_w_df <- results_df |> 
-  dplyr::select(!c(w1, w2, w3, w4, gamma, mood_pre, mood_post))
+  dplyr::select(!c(w0, w1, w2, w3, w4, w5, gamma, mood_pre, mood_post))
 
+# Imputation of missing data.
 imputed_cart = complete(mice(results_w_df, method = "cart"))
 
-# Outcome
+# Data wrangling.
 imputed_cart$is_reversal <- factor(imputed_cart$is_reversal)
 imputed_cart$rev <- ifelse(imputed_cart$is_reversal == 1, 1, -1)
 
 imputed_cart$ema_number_c <- 
   imputed_cart$ema_number - mean(imputed_cart$ema_number)
 
-# Center mood_post by user_id.
+# Difference post - pre on the raw data. 
 bysubj_df <- imputed_cart |> 
-  group_by(user_id) |> 
+  # group_by(user_id) |> 
   mutate(
-    mood_post_z = as.vector(scale(cmood_post, center = TRUE, scale = TRUE)),
-    mood_pre_z = as.vector(scale(cmood_pre, center = TRUE, scale = TRUE)),
-    control_z = as.vector(scale(control, center = TRUE, scale = TRUE)),
     # Approximately centered: the fifth session is considered the reference
     ema_number_c = ema_number - 5,
-    # difference on the row data. The outliers on mood_pre and mood_post have 
-    # been replaced with NAs and then imputed.
+    # The outliers on mood_pre and mood_post have been replaced with NAs and 
+    # then imputed.
     mood_dif = cmood_post - cmood_pre
   ) |> 
+  dplyr::rename(
+    mood_pre = cmood_pre,
+    mood_post = cmood_post  
+  ) |> 
   ungroup()
+  
+bysubj_df$environment <- 
+  ifelse(bysubj_df$is_reversal == 1, "Volatile", "Stable") |> 
+  as.factor()
+
+
+# Effect of environment on alpha -----------------------------------------------
+
+bysubj_df$calpha |> hist()
+
+m <- brm(
+  calpha ~ environment +
+    (environment | user_id / ema_number_c),
+  family = asym_laplace(),
+  algorithm = "meanfield",
+  data = bysubj_df
+)
+pp_check(m)
+summary(m)
+bayes_R2(m)
+conditional_effects(m, "environment")
+
+# In a highly volatile environment, an agent might benefit from a higher α 
+# value, allowing it to rapidly update its expectations to adapt to the 
+# changing contingencies. A high α value places more weight on recent outcomes, 
+# making the agent more responsive to changes.
+
+
+# Procedure effect on mood difference ------------------------------------------
+
+bysubj_df$mood_dif |> hist()
+
+mod1 <- brm(
+  mood_dif ~ mood_pre + control + 
+    environment * (cw1 + cw2 + cw3 + cw4 + cw5 + cwg) +
+    (mood_pre + control + environment | user_id / ema_number_c),
+  family = student(),
+  algorithm = "meanfield",
+  data = bysubj_df
+)
+loo1 <- loo(mod1)
+plot(loo1)
+
+pp_check(mod1)  + xlim(-80, 80)
+bayes_R2(mod1)
+summary(mod1)
+# w1: Outcome
+# w2: Reversal
+conditional_effects(mod1, "cw3:environment") # w3: Stimulus
+conditional_effects(mod1, "cw4") # w4: delta_p
+conditional_effects(mod1, "cw5:environment") # w5: RPE
+conditional_effects(mod1, "cwg:environment") # gamma
+conditional_effects(mod1, "environment")
+conditional_effects(mod1, "control")
+conditional_effects(mod1, "mood_pre")
+
+
+mod2 <- brm(
+  mood_dif ~ mood_pre + control + environment +
+    (mood_pre + control + environment | user_id / ema_number_c),
+  family = student(),
+  algorithm = "meanfield",
+  data = bysubj_df
+)
+loo2 <- loo(mod2)
+plot(loo2)
+
+# compare both models
+loo_compare(loo1, loo2)  
 
 
 
 
-mod <- brm(
-  mood_dif ~ cmood_pre + 
-    is_reversal * (cw1 + cw2 + cw3 + cw4 + cwg) +
-    (is_reversal | user_id/ema_number_c),
+
+
+
+
+
+bysubj_df |> 
+  group_by(user_id, environment) |> 
+  summarize(
+    md = mean(mood_dif, trim = 0.1),
+    pre = mean(mood_pre, trim = 0.1),
+    post = mean(mood_post, trim = 0.1)
+  ) |> 
+  group_by(environment) |> 
+  summarize(
+    mood_dif = mean(md, trim = 0.1),
+    sdterr = sqrt(var(md) / n()),
+    n = n(),
+    mood_pre = mean(pre),
+    mood_post = mean(post)
+  )
+
+mod2 <- brm(
+  mood_dif ~ mood_pre * environment + 
+    (mood_pre * environment | user_id / ema_number),
   family = student(),
   algorithm = "meanfield",
   iter = 40000,
   data = bysubj_df
 )
 
-pp_check(mod) 
-bayes_R2(mod)
-summary(mod)
-conditional_effects(mod, "cmood_pre:is_reversal")
+pp_check(mod2) + xlim(-80, 80)
+summary(mod2)
+bayes_R2(mod2)
+conditional_effects(mod2, "environment")
 
 
-
-
-
-
-
-
-
-
-
-mod <- brm(
-  dif ~ pre + is_reversal * (w1 + w2 + w3 + w4 + gamma) + 
-    (1 + is_reversal | user_id),
-  family = asym_laplace(),
+mod3 <- brm(
+  mood_dif ~ control + ema_number + mood_pre + 
+    (control + ema_number + mood_pre | user_id),
+  family = student(),
   algorithm = "meanfield",
   iter = 40000,
-  data = dd
+  data = bysubj_df
 )
 
+pp_check(mod3) 
+summary(mod3)
+bayes_R2(mod3)
+conditional_effects(mod3, "ema_number")
+conditional_effects(mod3, "mood_pre")
 
-bysubj_long_df <- imputed_cart %>%
+
+
+
+
+
+bysubj_long_df <- bysubj_df |> 
+  dplyr::select(-mood_dif) |> 
   pivot_longer(
-    cols = starts_with("cmood_"),
+    cols = starts_with("mood_"),
     names_to = "cond",
     values_to = "mood",
     values_drop_na = TRUE
   )
 
-fm <- brm(
-  mood ~ cond * is_reversal +
-    (cond * is_reversal | user_id/ema_number),
-  family = asym_laplace(),
+bysubj_long_df |> 
+  group_by(cond) |> 
+  summarize(
+    avg = mean(mood)
+  )
+
+mod3 <- brm(
+  mood ~ control + environment * cond +
+    (control + environment * cond | user_id/ema_number),
+  family = student(),
   algorithm = "meanfield",
   iter = 40000,
   data = bysubj_long_df
-)pp_check(mod) 
-summary(mod)
-bayes_R2(mod)
-conditional_effects(mod, "z1:is_reversal")
+)
+
+pp_check(mod3) 
+summary(mod3)
+bayes_R2(mod3)
+conditional_effects(mod3, "environment:cond")
 
 
 
@@ -386,79 +448,6 @@ conditional_effects(fm5, "ema_number_c:rev")
 
 
 # eof ----
-
-
-all_results_df <- all_results_df |> 
-  dplyr::filter(is_reversal == 1)
-
-
-hist(all_results_df$w1)
-hist(all_results_df$w2)
-hist(all_results_df$w3)
-hist(all_results_df$w4)
-hist(all_results_df$gamma)
-
-# Outcome
-all_results_df$ema_number_c <- 
-  all_results_df$ema_number - mean(all_results_df$ema_number)
-
-
-fm1 <- brm(
-  w1 ~ ema_number_c + (ema_number_c | user_id),
-  family = student(),
-  data = all_results_df,
-  algorithm = "meanfield"
-)
-pp_check(fm1) + xlim(-4, 4)
-summary(fm1)
-conditional_effects(fm1, "ema_number_c")
-
-# Reversal
-fm2 <- brm(
-  w2 ~ ema_number_c + (ema_number_c | user_id),
-  family = student(),
-  data = all_results_df,
-  algorithm = "meanfield"
-)
-pp_check(fm2) + xlim(-4, 4)
-summary(fm2)
-conditional_effects(fm2, "ema_number_c")
-
-
-# Stimulus
-fm3 <- brm(
-  w3 ~ ema_number_c + (ema_number_c | user_id),
-  family = student(),
-  data = all_results_df,
-  algorithm = "meanfield"
-)
-pp_check(fm3) + xlim(-4, 4)
-summary(fm3)
-conditional_effects(fm3, "ema_number_c")
-
-# Delta P
-fm4 <- brm(
-  w4 ~ ema_number_c + (ema_number_c | user_id),
-  family = student(),
-  data = all_results_df,
-  algorithm = "meanfield"
-)
-pp_check(fm4) + xlim(-8, 4)
-summary(fm4)
-conditional_effects(fm4, "ema_number_c")
-
-
-# gamma
-fm5 <- brm(
-  gamma ~ ema_number_c + (ema_number_c | user_id),
-  family = student(),
-  data = all_results_df,
-  algorithm = "meanfield"
-)
-pp_check(fm5) + xlim(-1, 1)
-summary(fm5)
-conditional_effects(fm5, "ema_number_c")
-
 
 
 
